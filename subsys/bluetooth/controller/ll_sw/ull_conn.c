@@ -382,7 +382,8 @@ uint8_t ll_conn_update(uint16_t handle, uint8_t cmd, uint8_t status, uint16_t in
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 
-		conn->llcp_cu.win_size = 1U;
+		//conn->llcp_cu.win_size = 1U;
+		conn->llcp_cu.win_size = 3U;
 		conn->llcp_cu.win_offset_us = 0U;
 		conn->llcp_cu.interval = interval_max;
 		conn->llcp_cu.latency = latency;
@@ -3489,7 +3490,8 @@ static inline void event_conn_param_rsp(struct ll_conn *conn)
 		conn->llcp_conn_param.state = LLCP_CPR_STATE_UPD;
 
 		/* Initiate connection update procedure */
-		conn->llcp_cu.win_size = 1U;
+		//conn->llcp_cu.win_size = 1U;
+		conn->llcp_cu.win_size = 3U;
 		conn->llcp_cu.win_offset_us = 0U;
 
 		interval_max = conn->llcp_conn_param.interval_max;
@@ -4853,7 +4855,8 @@ static inline int reject_ind_conn_upd_recv(struct ll_conn *conn,
 
 		conn->llcp_conn_param.state = LLCP_CPR_STATE_UPD;
 
-		conn->llcp_cu.win_size = 1U;
+		//conn->llcp_cu.win_size = 1U;
+		conn->llcp_cu.win_size = 3U;
 		conn->llcp_cu.win_offset_us = 0U;
 		conn->llcp_cu.interval = conn->llcp_conn_param.interval_max;
 		conn->llcp_cu.latency = conn->llcp_conn_param.latency;
@@ -6685,7 +6688,8 @@ static inline int ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
 				conn->llcp_conn_param.state =
 					LLCP_CPR_STATE_UPD;
 
-				conn->llcp_cu.win_size = 1U;
+				//conn->llcp_cu.win_size = 1U;
+				conn->llcp_cu.win_size = 3U;
 				conn->llcp_cu.win_offset_us = 0U;
 				conn->llcp_cu.interval =
 					conn->llcp_conn_param.interval_max;

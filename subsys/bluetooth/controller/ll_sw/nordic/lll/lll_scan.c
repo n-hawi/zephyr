@@ -234,7 +234,8 @@ void lll_scan_prepare_connect_req(struct lll_scan *lll, struct pdu_adv *pdu_tx,
 	memcpy(&pdu_tx->connect_ind.access_addr[0],
 	       &lll_conn->access_addr[0], 4);
 	memcpy(&pdu_tx->connect_ind.crc_init[0], &lll_conn->crc_init[0], 3);
-	pdu_tx->connect_ind.win_size = 1;
+	//pdu_tx->connect_ind.win_size = 1;
+	pdu_tx->connect_ind.win_size = 3;
 
 	conn_interval_us = (uint32_t)lll_conn->interval * CONN_INT_UNIT_US;
 	conn_offset_us = radio_tmr_end_get() + EVENT_IFS_US +

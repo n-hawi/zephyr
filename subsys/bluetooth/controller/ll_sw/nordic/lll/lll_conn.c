@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <stdio.h> // tx sum print - nhawighorst@uos.de
+
 #include <toolchain.h>
 #include <soc.h>
 
@@ -48,6 +50,7 @@ static void empty_tx_init(void);
 static uint8_t crc_expire;
 static uint8_t crc_valid;
 static uint16_t trx_cnt;
+static uint32_t tx_sum = 0U; // init tx count - nhawighorst@uos.de
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
 static uint8_t mic_state;
@@ -123,6 +126,8 @@ int lll_conn_reset(void)
 void lll_conn_flush(uint16_t handle, struct lll_conn *lll)
 {
 	/* Nothing to be flushed */
+	printk("\nlll_conn_flush - tx_sum: %d\n", tx_sum); //  print tx count - nhawighorst@uos.de
+	tx_sum = 0U;// reset tx count - nhawighorst@uos.de
 }
 
 void lll_conn_prepare_reset(void)
@@ -468,6 +473,8 @@ void lll_conn_isr_tx(void *param)
 #endif /* CONFIG_BT_CTLR_GPIO_LNA_PIN */
 
 	radio_isr_set(lll_conn_isr_rx, param);
+
+	tx_sum++; // count tx - nhawighorst@uos.de
 }
 
 void lll_conn_rx_pkt_set(struct lll_conn *lll)
