@@ -18,6 +18,20 @@ LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <syscall_handler.h>
 #include <sys/fdtable.h>
 
+/* TODO: Remove all direct access to private fields.
+ * According with Mbed TLS migration guide:
+ *
+ * Direct access to fields of structures
+ * (`struct` types) declared in public headers is no longer
+ * supported. In Mbed TLS 3, the layout of structures is not
+ * considered part of the stable API, and minor versions (3.1, 3.2,
+ * etc.) may add, remove, rename, reorder or change the type of
+ * structure fields.
+ */
+#if !defined(MBEDTLS_ALLOW_PRIVATE_ACCESS)
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
+#endif
+
 #if defined(CONFIG_MBEDTLS)
 #if !defined(CONFIG_MBEDTLS_CFG_FILE)
 #include "mbedtls/config.h"
@@ -44,6 +58,10 @@ LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #endif /* CONFIG_NET_SOCKETS_TLS_MAX_APP_PROTOCOLS */
 
 static const struct socket_op_vtable tls_sock_fd_op_vtable;
+
+#ifndef MBEDTLS_ERR_SSL_PEER_VERIFY_FAILED
+#define MBEDTLS_ERR_SSL_PEER_VERIFY_FAILED MBEDTLS_ERR_SSL_UNEXPECTED_MESSAGE
+#endif
 
 /** A list of secure tags that TLS context should use. */
 struct sec_tag_list {
@@ -673,7 +691,8 @@ static int tls_set_own_cert(struct tls_context *tls,
 	}
 
 	err = mbedtls_pk_parse_key(&tls->priv_key, priv_key->buf,
-				   priv_key->len, NULL, 0);
+				   priv_key->len, NULL, 0,
+				   tls_ctr_drbg_random, NULL);
 	if (err != 0) {
 		return -EINVAL;
 	}
@@ -1673,6 +1692,10 @@ ssize_t ztls_sendmsg_ctx(struct tls_context *ctx, const struct msghdr *msg,
 			struct iovec *vec = msg->msg_iov + i;
 			size_t sent = 0;
 
+			if (vec->iov_len == 0) {
+				continue;
+			}
+
 			while (sent < vec->iov_len) {
 				uint8_t *ptr = (uint8_t *)vec->iov_base + sent;
 
@@ -2658,4 +2681,13 @@ static bool tls_is_supported(int family, int type, int proto)
 	return false;
 }
 
-NET_SOCKET_REGISTER(tls, AF_UNSPEC, tls_is_supported, ztls_socket);
+/* Since both, TLS sockets and regular ones fall under the same address family,
+ * it's required to process TLS first in order to capture socket calls which
+ * create sockets for secure protocols. Every other call for AF_INET/AF_INET6
+ * will be forwarded to regular socket implementation.
+ */
+BUILD_ASSERT(CONFIG_NET_SOCKETS_TLS_PRIORITY < CONFIG_NET_SOCKETS_PRIORITY_DEFAULT,
+	     "CONFIG_NET_SOCKETS_TLS_PRIORITY have to be smaller than CONFIG_NET_SOCKETS_PRIORITY_DEFAULT");
+
+NET_SOCKET_REGISTER(tls, CONFIG_NET_SOCKETS_TLS_PRIORITY, AF_UNSPEC,
+		    tls_is_supported, ztls_socket);

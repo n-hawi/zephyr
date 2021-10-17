@@ -436,6 +436,16 @@ class Handler:
         proc.kill()
         self.terminated = True
 
+    def add_missing_testscases(self, harness):
+        """
+        If testsuite was broken by some error (e.g. timeout) it is necessary to
+        add information about next testcases, which were not be
+        performed due to this error.
+        """
+        for c in self.instance.testcase.cases:
+            if c not in harness.tests:
+                harness.tests[c] = "BLOCK"
+
 
 class BinaryHandler(Handler):
     def __init__(self, instance, type_str):
@@ -590,6 +600,7 @@ class BinaryHandler(Handler):
         else:
             self.set_state("timeout", handler_time)
             self.instance.reason = "Timeout"
+            self.add_missing_testscases(harness)
 
         self.record(harness)
 
@@ -722,7 +733,7 @@ class DeviceHandler(Handler):
         else:
             serial_device = hardware.serial
 
-        logger.debug("Using serial device {}".format(serial_device))
+        logger.debug("Using serial device {} @ {} baud".format(serial_device, hardware.serial_baud))
 
         if (self.suite.west_flash is not None) or runner:
             command = ["west", "flash", "--skip-rebuild", "-d", self.build_dir]
@@ -779,7 +790,7 @@ class DeviceHandler(Handler):
         try:
             ser = serial.Serial(
                 serial_device,
-                baudrate=115200,
+                baudrate=hardware.serial_baud,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 bytesize=serial.EIGHTBITS,
@@ -859,9 +870,7 @@ class DeviceHandler(Handler):
         handler_time = time.time() - start_time
 
         if out_state in ["timeout", "flash_error"]:
-            for c in self.instance.testcase.cases:
-                if c not in harness.tests:
-                    harness.tests[c] = "BLOCK"
+            self.add_missing_testscases(harness)
 
             if out_state == "timeout":
                 self.instance.reason = "Timeout"
@@ -1152,6 +1161,7 @@ class QEMUHandler(Handler):
                 self.instance.reason = "Timeout"
             else:
                 self.instance.reason = "Exited with {}".format(self.returncode)
+            self.add_missing_testscases(harness)
 
     def get_fifo(self):
         return self.fifo_fn
@@ -1986,7 +1996,7 @@ class CMake():
                     log.write(log_msg)
 
             if log_msg:
-                res = re.findall("region `(FLASH|RAM|ICCM|DCCM|SRAM)' overflowed by", log_msg)
+                res = re.findall("region `(FLASH|ROM|RAM|ICCM|DCCM|SRAM)' overflowed by", log_msg)
                 if res and not self.overflow_as_errors:
                     logger.debug("Test skipped due to {} Overflow".format(res[0]))
                     self.instance.status = "skipped"
@@ -2108,7 +2118,7 @@ class CMake():
 
         else:
             logger.error("Cmake script failure: %s" % (args[0]))
-            results = {"returncode": p.returncode}
+            results = {"returncode": p.returncode, "returnmsg": out}
 
         return results
 
@@ -2898,7 +2908,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
         try:
             if result['returncode']:
-                raise TwisterRuntimeError("E: Variable ZEPHYR_TOOLCHAIN_VARIANT is not defined")
+                raise TwisterRuntimeError(f"E: {result['returnmsg']}")
         except Exception as e:
             print(str(e))
             sys.exit(2)
@@ -3916,10 +3926,12 @@ class Gcovr(CoverageTool):
                                ["-o", os.path.join(subdir, "index.html")],
                                stdout=coveragelog)
 
+
 class DUT(object):
     def __init__(self,
                  id=None,
                  serial=None,
+                 serial_baud=None,
                  platform=None,
                  product=None,
                  serial_pty=None,
@@ -3930,6 +3942,9 @@ class DUT(object):
                  runner=None):
 
         self.serial = serial
+        self.serial_baud = 115200
+        if serial_baud:
+            self.serial_baud = serial_baud
         self.platform = platform
         self.serial_pty = serial_pty
         self._counter = Value("i", 0)
@@ -4021,8 +4036,8 @@ class HardwareMap:
         self.detected = []
         self.duts = []
 
-    def add_device(self, serial, platform, pre_script, is_pty):
-        device = DUT(platform=platform, connected=True, pre_script=pre_script)
+    def add_device(self, serial, platform, pre_script, is_pty, baud=None):
+        device = DUT(platform=platform, connected=True, pre_script=pre_script, serial_baud=baud)
 
         if is_pty:
             device.serial_pty = serial
@@ -4042,6 +4057,7 @@ class HardwareMap:
             id = dut.get('id')
             runner = dut.get('runner')
             serial = dut.get('serial')
+            baud = dut.get('baud', None)
             product = dut.get('product')
             fixtures = dut.get('fixtures', [])
             new_dut = DUT(platform=platform,
@@ -4049,6 +4065,7 @@ class HardwareMap:
                           runner=runner,
                           id=id,
                           serial=serial,
+                          serial_baud=baud,
                           connected=serial is not None,
                           pre_script=pre_script,
                           post_script=post_script,

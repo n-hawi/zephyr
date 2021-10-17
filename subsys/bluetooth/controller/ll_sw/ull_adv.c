@@ -836,7 +836,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 #if defined(CONFIG_BT_CTLR_PRIVACY)
 	lll->rl_idx = FILTER_IDX_NONE;
 
-	/* Prepare whitelist and optionally resolving list */
+	/* Prepare filter accept list and optionally resolving list */
 	ull_filter_adv_update(lll->filter_policy);
 
 	if (adv->own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
@@ -983,18 +983,18 @@ uint8_t ll_adv_enable(uint8_t enable)
 
 		/* FIXME: BEGIN: Move to ULL? */
 		conn_lll->role = 1;
-		conn_lll->slave.initiated = 0;
-		conn_lll->slave.cancelled = 0;
+		conn_lll->periph.initiated = 0;
+		conn_lll->periph.cancelled = 0;
 		conn_lll->data_chan_sel = 0;
 		conn_lll->data_chan_use = 0;
 		conn_lll->event_counter = 0;
 
 		conn_lll->latency_prepare = 0;
 		conn_lll->latency_event = 0;
-		conn_lll->slave.latency_enabled = 0;
-		conn_lll->slave.window_widening_prepare_us = 0;
-		conn_lll->slave.window_widening_event_us = 0;
-		conn_lll->slave.window_size_prepare_us = 0;
+		conn_lll->periph.latency_enabled = 0;
+		conn_lll->periph.window_widening_prepare_us = 0;
+		conn_lll->periph.window_widening_event_us = 0;
+		conn_lll->periph.window_size_prepare_us = 0;
 		/* FIXME: END: Move to ULL? */
 #if defined(CONFIG_BT_CTLR_CONN_META)
 		memset(&conn_lll->conn_meta, 0, sizeof(conn_lll->conn_meta));
@@ -1020,7 +1020,7 @@ uint8_t ll_adv_enable(uint8_t enable)
 
 		conn->common.fex_valid = 0;
 		conn->common.txn_lock = 0;
-		conn->slave.latency_cancel = 0;
+		conn->periph.latency_cancel = 0;
 
 		conn->llcp_req = conn->llcp_ack = conn->llcp_type = 0;
 		conn->llcp_rx = NULL;
@@ -1042,14 +1042,14 @@ uint8_t ll_adv_enable(uint8_t enable)
 		conn->llcp_enc.req = conn->llcp_enc.ack = 0U;
 		conn->llcp_enc.pause_tx = conn->llcp_enc.pause_rx = 0U;
 		conn->llcp_enc.refresh = 0U;
-		conn->slave.llcp_type = 0U;
+		conn->periph.llcp_type = 0U;
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
 		conn->llcp_conn_param.req = 0;
 		conn->llcp_conn_param.ack = 0;
 		conn->llcp_conn_param.disabled = 0;
-		conn->slave.ticks_to_offset = 0;
+		conn->periph.ticks_to_offset = 0;
 #endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -2479,13 +2479,13 @@ static inline uint8_t disable(uint8_t handle)
 #if defined(CONFIG_BT_PERIPHERAL)
 	if (adv->lll.conn) {
 		/* Indicate to LLL that a cancellation is requested */
-		adv->lll.conn->slave.cancelled = 1U;
+		adv->lll.conn->periph.cancelled = 1U;
 		cpu_dmb();
 
 		/* Check if a connection was initiated (connection
 		 * establishment race between LLL and ULL).
 		 */
-		if (unlikely(adv->lll.conn->slave.initiated)) {
+		if (unlikely(adv->lll.conn->periph.initiated)) {
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 	}
@@ -2697,7 +2697,7 @@ static inline uint8_t *adv_pdu_adva_get(struct pdu_adv *pdu)
 static const uint8_t *adva_update(struct ll_adv_set *adv, struct pdu_adv *pdu)
 {
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	const uint8_t *rpa = ull_filter_adva_get(adv);
+	const uint8_t *rpa = ull_filter_adva_get(adv->lll.rl_idx);
 #else
 	const uint8_t *rpa = NULL;
 #endif
@@ -2709,10 +2709,10 @@ static const uint8_t *adva_update(struct ll_adv_set *adv, struct pdu_adv *pdu)
 		if (0) {
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 		} else if (ll_adv_cmds_is_ext() && pdu->tx_addr) {
-			own_id_addr = ll_adv_aux_random_addr_get(adv, NULL);
+			own_id_addr = adv->rnd_addr;
 #endif
 		} else {
-			own_id_addr = ll_addr_get(pdu->tx_addr, NULL);
+			own_id_addr = ll_addr_get(pdu->tx_addr);
 		}
 	}
 
@@ -2739,7 +2739,7 @@ static void tgta_update(struct ll_adv_set *adv, struct pdu_adv *pdu)
 	const uint8_t *rx_addr = NULL;
 	uint8_t *tgt_addr;
 
-	rx_addr = ull_filter_tgta_get(adv);
+	rx_addr = ull_filter_tgta_get(adv->lll.rl_idx);
 	if (rx_addr) {
 		pdu->rx_addr = 1;
 

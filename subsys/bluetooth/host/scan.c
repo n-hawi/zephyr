@@ -161,7 +161,7 @@ static int start_le_scan_ext(struct bt_hci_ext_scan_phy *phy_1m,
 	set_param->phys = 0;
 
 	if (IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST) &&
-	    atomic_test_bit(bt_dev.flags, BT_DEV_SCAN_WL)) {
+	    atomic_test_bit(bt_dev.flags, BT_DEV_SCAN_FILTERED)) {
 		set_param->filter_policy = BT_HCI_LE_SCAN_FP_BASIC_FILTER;
 	} else {
 		set_param->filter_policy = BT_HCI_LE_SCAN_FP_BASIC_NO_FILTER;
@@ -210,7 +210,7 @@ static int start_le_scan_legacy(uint8_t scan_type, uint16_t interval, uint16_t w
 	set_param.window = sys_cpu_to_le16(window);
 
 	if (IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST) &&
-	    atomic_test_bit(bt_dev.flags, BT_DEV_SCAN_WL)) {
+	    atomic_test_bit(bt_dev.flags, BT_DEV_SCAN_FILTERED)) {
 		set_param.filter_policy = BT_HCI_LE_SCAN_FP_BASIC_FILTER;
 	} else {
 		set_param.filter_policy = BT_HCI_LE_SCAN_FP_BASIC_NO_FILTER;
@@ -535,6 +535,15 @@ void bt_hci_le_adv_ext_report(struct net_buf *buf)
 		/* Convert "Legacy" property to Extended property. */
 		adv_info.adv_props = evt->evt_type ^ BT_HCI_LE_ADV_PROP_LEGACY;
 
+		if (BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS(evt->evt_type) ==
+		    BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_PARTIAL) {
+			/* Handling of incomplete reports is currently not
+			 * handled in the host. The remaining advertising
+			 * reports may therefore contain partial data.
+			 */
+			BT_WARN("Incomplete adv report");
+		}
+
 		le_adv_recv(&evt->addr, &adv_info, buf, evt->length);
 
 		net_buf_pull(buf, evt->length);
@@ -628,6 +637,14 @@ void bt_hci_le_per_adv_report(struct net_buf *buf)
 	info.rssi = evt->rssi;
 	info.cte_type = BIT(evt->cte_type);
 	info.addr = &per_adv_sync->addr;
+
+	if (evt->data_status == BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_PARTIAL) {
+		/* Handling of incomplete reports is currently not
+		 * handled in the host. The remaining advertising
+		 * reports may therefore contain partial data.
+		 */
+		BT_WARN("Incomplete per adv report");
+	}
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&pa_sync_cbs, listener, node) {
 		if (listener->recv) {
@@ -992,7 +1009,7 @@ int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb)
 			  param->options & BT_LE_SCAN_OPT_FILTER_DUPLICATE);
 
 #if defined(CONFIG_BT_FILTER_ACCEPT_LIST)
-	atomic_set_bit_to(bt_dev.flags, BT_DEV_SCAN_WL,
+	atomic_set_bit_to(bt_dev.flags, BT_DEV_SCAN_FILTERED,
 			  param->options & BT_LE_SCAN_OPT_FILTER_ACCEPT_LIST);
 #endif /* defined(CONFIG_BT_FILTER_ACCEPT_LIST) */
 
